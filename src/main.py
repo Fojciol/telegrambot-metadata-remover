@@ -40,8 +40,19 @@ async def main():
     else:
         logger.warning("Bot configured in OPEN mode (ALLOWED_USER_IDS is empty). Anyone can use the bot.")
 
+    session = None
+    if settings.telegram_api_server:
+        from aiogram.client.session.aiohttp import AiohttpSession
+        from aiogram.client.telegram import TelegramAPIServer
+
+        logger.info(f"Using custom Telegram Bot API server: {settings.telegram_api_server}")
+        session = AiohttpSession(
+            api=TelegramAPIServer.from_base(settings.telegram_api_server, is_local=True)
+        )
+
     bot = Bot(
         token=settings.bot_token,
+        session=session,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
 

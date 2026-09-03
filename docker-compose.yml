@@ -11,5 +11,6 @@ services:
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
       - ALLOWED_USER_IDS=${ALLOWED_USER_IDS:-}
-      - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-20}
+      - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB:-30}
       - TEMP_DIR=${TEMP_DIR:-/tmp/bot_media}
+      - TELEGRAM_API_SERVER=${TELEGRAM_API_SERVER:-}

@@ -18,6 +18,7 @@ class TestBotComponents(unittest.TestCase):
         # Test comma-separated string
         s1 = Settings(bot_token="fake_token", allowed_user_ids="12345, 67890, -100123")
         self.assertEqual(s1.allowed_user_ids, {12345, 67890, -100123})
+        self.assertEqual(s1.max_file_size_mb, 30)
 
         # Test empty string
         s2 = Settings(bot_token="fake_token", allowed_user_ids="")

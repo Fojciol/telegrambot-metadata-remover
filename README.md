@@ -79,8 +79,9 @@ Jeśli chcesz uruchomić bota lokalnie lub bezpośrednio na serwerze przez termi
 |---|---|---|---|
 | `BOT_TOKEN` | **Tak** | — | Token API bota z @BotFather |
 | `ALLOWED_USER_IDS` | Nie | *(puste)* | Numeryczne ID użytkowników Telegrama rozdzielone przecinkami. Jeśli puste, bot odpowiada każdemu. |
-| `MAX_FILE_SIZE_MB` | Nie | `20` | Maksymalny dozwolony rozmiar pobieranego pliku (w MB). |
+| `MAX_FILE_SIZE_MB` | Nie | `30` | Maksymalny dozwolony rozmiar pobieranego pliku (w MB). |
 | `TEMP_DIR` | Nie | `/tmp/bot_media` | Ścieżka katalogu tymczasowego w kontenerze. |
+| `TELEGRAM_API_SERVER` | Nie | *(chmura Telegrama)* | Adres lokalnego serwera Telegram Bot API (np. `http://telegram-bot-api:8081`). Wymagany dla plików > 20 MB z powodu limitu chmury Telegrama. |
 
 ---
 

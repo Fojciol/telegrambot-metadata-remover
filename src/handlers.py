@@ -9,6 +9,7 @@ from aiogram import Router, F, Bot
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, FSInputFile, TelegramObject
 from aiogram.dispatcher.middlewares.base import BaseMiddleware
+from aiogram.exceptions import TelegramBadRequest
 
 from src.config import Settings
 from src.metadata import inspect_metadata, strip_metadata
@@ -68,13 +69,13 @@ async def cmd_start(message: Message, settings: Settings):
 
 
 @router.message(Command("help"))
-async def cmd_help(message: Message):
+async def cmd_help(message: Message, settings: Settings):
     await message.answer(
         "📖 <b>Pomoc - Telegram Metadata Remover</b>\n\n"
         "1. <b>Obsługiwane formaty:</b> Obrazy (JPEG, PNG, HEIC, WEBP, TIFF itp.), wideo (MP4, MOV itp.), dokumenty (PDF) i pliki audio.\n"
         "2. <b>Bezstratność:</b> Bot używa silnika <b>ExifTool</b>, usuwając metadane bezpośrednio ze struktury pliku bez rekompresji obrazu.\n"
         "3. <b>Prywatność:</b> Po przetworzeniu i odesłaniu plik jest <b>natychmiast trwale kasowany</b> z dysku serwera.\n"
-        "4. <b>Maksymalny rozmiar:</b> do 20 MB (standardowy limit Telegram Bot API)."
+        f"4. <b>Maksymalny rozmiar:</b> do {settings.max_file_size_mb} MB."
     )
 
 
@@ -153,6 +154,21 @@ async def process_media_file(
         except Exception:
             pass
 
+    except TelegramBadRequest as e:
+        logger.error(f"TelegramBadRequest processing file: {e}")
+        err_text = str(e).lower()
+        if "file is too big" in err_text:
+            await status_msg.edit_text(
+                f"⚠️ <b>Plik przekracza limit oficjalnego serwera Telegram Bot API!</b>\n\n"
+                f"Wykryty rozmiar: <b>{file_size / (1024 * 1024):.1f} MB</b>.\n"
+                f"Domyślne serwery Telegrama (api.telegram.org) blokują pobieranie plików powyżej <b>20 MB</b> przez boty.\n\n"
+                f"💡 <i>Aby bot mógł pobierać pliki do {settings.max_file_size_mb} MB (lub nawet 2 GB), "
+                f"wystarczy uruchomić w Dokploy lokalny kontener <b>telegram-bot-api</b> i ustawić zmienną <code>TELEGRAM_API_SERVER</code>.</i>"
+            )
+        else:
+            await status_msg.edit_text(
+                f"❌ <b>Błąd Telegram API:</b>\n<code>{str(e)[:150]}</code>"
+            )
     except Exception as e:
         logger.error(f"Error processing file for message {message.message_id}: {e}", exc_info=True)
         await status_msg.edit_text(

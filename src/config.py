@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Set
+from typing import Any, Optional, Set
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -8,7 +8,8 @@ class Settings(BaseSettings):
     bot_token: str
     allowed_user_ids: Set[int] = set()
     temp_dir: Path = Path("/tmp/bot_media")
-    max_file_size_mb: int = 20
+    max_file_size_mb: int = 30
+    telegram_api_server: Optional[str] = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
