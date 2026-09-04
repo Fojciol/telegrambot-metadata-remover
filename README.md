@@ -9,7 +9,13 @@ Przystosowany do prostego uruchomienia na VPS za pomocą panelu **Dokploy** (lub
 ## ✨ Cechy i możliwości
 
 - 🛡️ **Bezstratne czyszczenie (ExifTool):** Usuwa metadane in-place bez dekompresji i ponownej kompresji plików – jakość grafiki i wideo pozostaje w 100% nienaruszona.
-- 📁 **Wielofunkcyjność:** Obsługuje zdjęcia (JPEG, PNG, HEIC, WEBP, TIFF), wideo (MP4, MOV), dokumenty (PDF) i pliki audio.
+- ⚡ **Unikalizator wideo (Anti-Duplicate / Bypass Meta ThreatExchange & TikTok):**
+  - Oparty na badaniach algorytmów **PDQ, TMK+PDQF i vPDQ** rozwijanych przez Meta (Instagram/Facebook) i TikTok.
+  - Aplikuje losowe mikromodyfikacje (mikro-zoom 1-2%, mikro-prędkość, ziarno matrycy, korekta barw i audio), generując zupełnie nowy cyfrowy odcisk percepcyjny.
+  - **Tryb Łagodny:** Bezpieczny dla filmów z napisami i twarzami (bez lustra).
+  - **Tryb Głęboki:** Zawiera dodatkowo poziome odbicie lustrzane (`hflip`) dla maksymalnego rozbicia sygnatur przestrzennych.
+  - Możliwość generowania wielu unikalnych kopii z jednego filmu (dla różnych kont) jednym kliknięciem.
+- 📁 **Wielofunkcyjność:** Obsługuje zdjęcia (JPEG, PNG, HEIC, WEBP, TIFF), wideo (MP4, MOV itp.), dokumenty (PDF) i pliki audio.
 - 📊 **Szczegółowy raport:** Odsyła plik wraz ze zwięzłym podsumowaniem wykrytych i usuniętych wrażliwych informacji (GPS, model aparatu, czas wykonania, autor).
 - 🔒 **Prywatność i bezpieczeństwo:**
   - Whitelist: Dostęp ograniczony tylko do wybranych Telegram ID użytkowników (ochrona Twojego serwera VPS).

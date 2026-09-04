@@ -5,9 +5,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     TEMP_DIR=/tmp/bot_media
 
-# Instalacja ExifTool oraz certyfikatów CA
+# Instalacja ExifTool, FFmpeg oraz certyfikatów CA
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libimage-exiftool-perl \
+    ffmpeg \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

@@ -58,8 +58,9 @@ async def main():
 
     dp = Dispatcher()
 
-    # Rejestracja middleware weryfikacji uprawnień (whitelist)
+    # Rejestracja middleware weryfikacji uprawnień (whitelist) dla wiadomości i callbacków
     dp.message.middleware(WhitelistMiddleware(settings=settings))
+    dp.callback_query.middleware(WhitelistMiddleware(settings=settings))
 
     # Przekazanie settings jako zależności do handlerów
     dp["settings"] = settings

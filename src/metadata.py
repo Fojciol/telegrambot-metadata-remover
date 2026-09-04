@@ -138,6 +138,9 @@ async def inspect_metadata(file_path: Path) -> MetadataReport:
 
         return report
 
+    except FileNotFoundError:
+        logger.warning("ExifTool executable not found in PATH.")
+        return MetadataReport()
     except asyncio.TimeoutError:
         logger.error(f"Timeout while reading metadata for {file_path}")
         return MetadataReport()
@@ -177,6 +180,9 @@ async def strip_metadata(file_path: Path) -> bool:
         # Jeśli plik istnieje i nie został uszkodzony, zwracamy True
         return file_path.exists() and file_path.stat().st_size > 0
 
+    except FileNotFoundError:
+        logger.warning(f"ExifTool executable not found in PATH. File {file_path} preserved.")
+        return file_path.exists() and file_path.stat().st_size > 0
     except asyncio.TimeoutError:
         logger.error(f"Timeout while stripping metadata for {file_path}")
         return False
