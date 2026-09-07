@@ -3,7 +3,7 @@ import os
 import shutil
 import uuid
 from pathlib import Path
-from typing import Callable, Dict, Any, Awaitable
+from typing import Callable, Dict, Any, Awaitable, Optional
 
 from aiogram import Router, F, Bot
 from aiogram.filters import CommandStart, Command
@@ -20,12 +20,17 @@ from aiogram.exceptions import TelegramBadRequest
 
 from src.config import Settings
 from src.metadata import inspect_metadata, strip_metadata
-from src.video_uniquifier import uniquify_video
+from src.video_uniquifier import (
+    uniquify_video,
+    uniquify_photo,
+    create_zip_archive
+)
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".flv", ".m4v", ".3gp"}
+PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".tiff", ".bmp"}
 
 
 def is_video_file(filename: str, mime_type: str = "") -> bool:
@@ -34,8 +39,14 @@ def is_video_file(filename: str, mime_type: str = "") -> bool:
     return ext in VIDEO_EXTENSIONS or (bool(mime_type) and "video" in mime_type.lower())
 
 
-def get_uniquify_keyboard(is_retry: bool = False) -> InlineKeyboardMarkup:
-    """Zwraca przyciski wyboru trybu unikalizacji wideo."""
+def is_photo_file(filename: str, mime_type: str = "") -> bool:
+    """Sprawdza, czy dany plik jest obrazem na podstawie rozszerzenia lub typu MIME."""
+    ext = Path(filename).suffix.lower()
+    return ext in PHOTO_EXTENSIONS or (bool(mime_type) and "image" in mime_type.lower())
+
+
+def get_video_keyboard(is_retry: bool = False) -> InlineKeyboardMarkup:
+    """Zwraca przyciski wyboru dla pliku wideo (unikalizacja + ZIP)."""
     prefix = "🔄 Kolejna kopia" if is_retry else "⚡ Zunikalizuj"
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -47,6 +58,33 @@ def get_uniquify_keyboard(is_retry: bool = False) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text=f"{prefix} (Lustro)",
                     callback_data="unq:deep"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📦 Pobierz jako ZIP",
+                    callback_data="zip"
+                )
+            ]
+        ]
+    )
+
+
+def get_photo_keyboard(is_retry: bool = False) -> InlineKeyboardMarkup:
+    """Zwraca przyciski wyboru dla zdjęcia (Anti-AI unikalizacja + ZIP)."""
+    prefix = "🔄 Kolejna (Anti-AI)" if is_retry else "⚡ Zunikalizuj (Anti-AI / SynthID)"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=prefix,
+                    callback_data="unq_photo"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📦 Pobierz jako ZIP",
+                    callback_data="zip"
                 )
             ]
         ]
@@ -91,17 +129,18 @@ class WhitelistMiddleware(BaseMiddleware):
 async def cmd_start(message: Message, settings: Settings):
     user_id = message.from_user.id if message.from_user else 0
     await message.answer(
-        f"👋 <b>Cześć! Jestem Twoim botem do usuwania metadanych i unikalizacji wideo.</b>\n\n"
-        f"🛡️ <b>Usuwanie metadanych (ExifTool):</b>\n"
-        f"• 📍 Współrzędne GPS (gdzie zrobiono zdjęcie/film)\n"
-        f"• 📱 Model telefonu / aparatu i obiektywu\n"
-        f"• 📅 Dokładną datę i godzinę wykonania\n"
-        f"• 💻 Wersję oprogramowania, dane edycji i profilu\n\n"
-        f"⚡ <b>Unikalizator wideo (Bypass Meta ThreatExchange / TikTok):</b>\n"
-        f"• Po przesłaniu wideo możesz jednym kliknięciem wygenerować zunikalizowane wersje z losowymi parametrami (mikro-zoom, zmiana prędkości, ziarno, audio, opcjonalne lustro).\n"
-        f"• Omija algorytmy vPDQ, TMK oraz audio fingerprinting – idealne do publikacji tego samego filmu na wielu kontach bez obcinania zasięgów!\n\n"
-        f"🚀 <b>Jak używać?</b>\n"
-        f"Po prostu wyślij mi plik lub wideo (najlepiej jako <b>Plik / Dokument bez kompresji</b>).\n\n"
+        f"👋 <b>Cześć! Jestem zaawansowanym botem do usuwania metadanych i unikalizacji mediów.</b>\n\n"
+        f"🛡️ <b>Usuwanie metadanych i śladów AI (ExifTool):</b>\n"
+        f"• 🤖 Usuwa manifesty <b>C2PA / JUMBF (Content Credentials)</b> stosowane przez generatory AI (Kling AI, Nanabanapro, Midjourney, DALL-E, Sora)\n"
+        f"• 📍 Usuwa współrzędne GPS, model telefonu/aparatu, dokładne daty i historię edycji\n"
+        f"• 💬 Usuwa ukryte prompty, workflow i parametry generowania\n\n"
+        f"⚡ <b>Unikalizator wideo i zdjęć (Bypass Meta ThreatExchange / TikTok / SynthID):</b>\n"
+        f"• Omija algorytmy vPDQ, TMK oraz niewidzialne znaki wodne <b>SynthID</b> (Kling AI / Google)\n"
+        f"• Aplikuje mikromodyfikacje (zoom, przesunięcie siatki, tempo, subtelne ziarno i audio)\n"
+        f"• Pozwala generować wiele unikalnych kopii dla różnych kont jednym kliknięciem!\n\n"
+        f"📱 <b>Czyste pliki dla iPhone:</b>\n"
+        f"• Wszystkie pliki są wysyłane jako surowe dokumenty (bez playera wideo i bez psucia formatu)\n"
+        f"• Przycisk <b>📦 Pobierz jako ZIP</b> pozwala na 100% sterylną izolację na iOS bez powiązań z aplikacją Zdjęcia\n\n"
         f"🆔 Twoje Telegram ID: <code>{user_id}</code>"
     )
 
@@ -109,14 +148,14 @@ async def cmd_start(message: Message, settings: Settings):
 @router.message(Command("help"))
 async def cmd_help(message: Message, settings: Settings):
     await message.answer(
-        "📖 <b>Pomoc - Telegram Metadata Remover & Video Uniquifier</b>\n\n"
-        "1. <b>Obsługiwane formaty:</b> Obrazy (JPEG, PNG, HEIC, WEBP, TIFF), wideo (MP4, MOV itp.), dokumenty (PDF) i audio.\n"
-        "2. <b>Bezstratność:</b> Bot używa silnika <b>ExifTool</b> do bezpośredniego usuwania metadanych ze struktury pliku.\n"
-        "3. <b>Unikalizacja wideo (FFmpeg):</b> Pod każdym przesłanym filmem znajdziesz przyciski do wygenerowania unikalnej kopii z nowym podpisem percepcyjnym.\n"
-        "   • <b>Tryb Łagodny:</b> mikro-zoom, zmiana tempa, subtelny szum matrycy, korekta audio (bezpieczny dla napisów i twarzy).\n"
-        "   • <b>Tryb Głęboki (Lustro):</b> wszystko powyższe + poziome odbicie lustrzane.\n"
-        "4. <b>Prywatność:</b> Po przetworzeniu i odesłaniu plik jest <b>natychmiast trwale kasowany</b> z dysku serwera.\n"
-        f"5. <b>Maksymalny rozmiar:</b> do {settings.max_file_size_mb} MB."
+        "📖 <b>Pomoc - Telegram Metadata Remover & AI Uniquifier</b>\n\n"
+        "1. <b>Obsługiwane pliki:</b> Wideo (MP4, MOV itp.), zdjęcia (JPEG, PNG, HEIC, WEBP itp.), dokumenty (PDF) i audio.\n"
+        "2. <b>Generatory AI:</b> Bot bezpowrotnie niszczy manifesty C2PA/JUMBF oraz tagi generatorów (Kling AI, Nanabanapro, Midjourney, ComfyUI itp.).\n"
+        "3. <b>Niewidzialne znaki wodne (SynthID):</b> Aby zniszczyć znak wodny w pikselach, użyj przycisków <b>⚡ Zunikalizuj</b> pod przesłanym plikiem.\n"
+        "4. <b>Zapisywanie na iPhone:</b>\n"
+        "   • Bot wysyła plik z blokadą autodetekcji mediów, więc Telegram traktuje go jak czysty plik.\n"
+        "   • Kliknięcie <b>📦 Pobierz jako ZIP</b> pakuje plik do archiwum .zip. Zapisz go w aplikacji 'Pliki' na iPhone, aby mieć 100% sterylny materiał.\n"
+        f"5. <b>Maksymalny rozmiar pliku:</b> do {settings.max_file_size_mb} MB."
     )
 
 
@@ -150,7 +189,7 @@ async def process_media_file(
         return
 
     # Informacja o przetwarzaniu
-    status_msg = await message.reply("⏳ <i>Pobieram i analizuję metadane...</i>")
+    status_msg = await message.reply("⏳ <i>Pobieram i analizuję metadane oraz ślady AI...</i>")
     await bot.send_chat_action(chat_id=message.chat.id, action="upload_document")
 
     # Unikalny katalog roboczy dla tego zadania
@@ -166,11 +205,11 @@ async def process_media_file(
 
         await bot.download_file(file_obj.file_path, destination=local_file_path)
 
-        # 1. Odczyt metadanych do raportu
+        # 1. Odczyt metadanych do raportu (w tym śladów AI)
         report = await inspect_metadata(local_file_path)
 
-        # 2. Usunięcie metadanych
-        await status_msg.edit_text("🧹 <i>Usuwam ukryte metadane (ExifTool)...</i>")
+        # 2. Usunięcie metadanych (EXIF, GPS, C2PA / JUMBF)
+        await status_msg.edit_text("🧹 <i>Usuwam metadane i manifesty C2PA (ExifTool)...</i>")
         success = await strip_metadata(local_file_path)
 
         if not success or not local_file_path.exists():
@@ -183,19 +222,31 @@ async def process_media_file(
 
         report_caption = report.format_telegram_message()
 
-        # Sprawdzenie czy plik jest wideo (aby dodać przyciski unikalizacji)
+        # Dobór odpowiedniej klawiatury w zależności od typu pliku
         is_video = (
             is_video_file(original_filename)
             or (message.video is not None)
             or (message.document and is_video_file(message.document.file_name or "", message.document.mime_type or ""))
         )
-        reply_markup = get_uniquify_keyboard(is_retry=False) if is_video else None
+        is_photo = (
+            is_photo_file(original_filename)
+            or (message.photo is not None)
+            or (message.document and is_photo_file(message.document.file_name or "", message.document.mime_type or ""))
+        )
 
-        # Odsyłamy jako dokument, aby Telegram nie kompresował pliku i nie dodawał własnych artefaktów
+        reply_markup = None
+        if is_video:
+            reply_markup = get_video_keyboard(is_retry=False)
+        elif is_photo:
+            reply_markup = get_photo_keyboard(is_retry=False)
+
+        # Odsyłamy jako surowy dokument z disable_content_type_detection=True
+        # aby Telegram nie tworzył wbudowanego playera wideo na iPhone
         await message.reply_document(
             document=input_file,
             caption=report_caption,
-            reply_markup=reply_markup
+            reply_markup=reply_markup,
+            disable_content_type_detection=True
         )
 
         # Usunięcie komunikatu o statusie
@@ -230,8 +281,20 @@ async def process_media_file(
             shutil.rmtree(task_dir, ignore_errors=True)
 
 
+def extract_media_from_message(msg: Message) -> Tuple[Optional[str], str, int]:
+    """Wyciąga file_id, nazwę pliku oraz rozmiar z wiadomości."""
+    if msg.document:
+        return msg.document.file_id, msg.document.file_name or "file.bin", msg.document.file_size or 0
+    if msg.video:
+        return msg.video.file_id, msg.video.file_name or "video.mp4", msg.video.file_size or 0
+    if msg.photo:
+        photo = msg.photo[-1]
+        return photo.file_id, f"photo_{photo.file_unique_id}.jpg", photo.file_size or 0
+    return None, "file.bin", 0
+
+
 @router.callback_query(F.data.startswith("unq:"))
-async def handle_uniquify_callback(query: CallbackQuery, bot: Bot, settings: Settings):
+async def handle_uniquify_video_callback(query: CallbackQuery, bot: Bot, settings: Settings):
     """Obsługuje kliknięcie przycisków unikalizacji wideo."""
     mode = query.data.split(":")[1] if ":" in query.data else "mild"
     msg = query.message
@@ -239,19 +302,7 @@ async def handle_uniquify_callback(query: CallbackQuery, bot: Bot, settings: Set
         await query.answer("Wiadomość wygasła.", show_alert=True)
         return
 
-    file_id = None
-    filename = "video.mp4"
-    file_size = 0
-
-    if msg.document:
-        file_id = msg.document.file_id
-        filename = msg.document.file_name or "video.mp4"
-        file_size = msg.document.file_size or 0
-    elif msg.video:
-        file_id = msg.video.file_id
-        filename = msg.video.file_name or "video.mp4"
-        file_size = msg.video.file_size or 0
-
+    file_id, filename, file_size = extract_media_from_message(msg)
     if not file_id:
         await query.answer("Nie znaleziono pliku wideo do unikalizacji.", show_alert=True)
         return
@@ -264,7 +315,7 @@ async def handle_uniquify_callback(query: CallbackQuery, bot: Bot, settings: Set
     )
     await bot.send_chat_action(chat_id=msg.chat.id, action="upload_document")
 
-    task_dir = settings.temp_dir / f"unq_{uuid.uuid4().hex}"
+    task_dir = settings.temp_dir / f"unq_vid_{uuid.uuid4().hex}"
     task_dir.mkdir(parents=True, exist_ok=True)
     input_path = task_dir / filename
 
@@ -287,11 +338,12 @@ async def handle_uniquify_callback(query: CallbackQuery, bot: Bot, settings: Set
         caption = params.format_telegram_caption()
         out_file = FSInputFile(path=output_path, filename=out_filename)
 
-        # Odsyłamy unikalne wideo z przyciskami umożliwiającymi wygenerowanie kolejnej kopii
+        # Odsyłamy unikalne wideo jako dokument bez autodetekcji mediów
         await msg.reply_document(
             document=out_file,
             caption=caption,
-            reply_markup=get_uniquify_keyboard(is_retry=True)
+            reply_markup=get_video_keyboard(is_retry=True),
+            disable_content_type_detection=True
         )
 
         try:
@@ -300,20 +352,138 @@ async def handle_uniquify_callback(query: CallbackQuery, bot: Bot, settings: Set
             pass
 
     except TelegramBadRequest as e:
-        logger.error(f"TelegramBadRequest in uniquify callback: {e}")
-        err_text = str(e).lower()
-        if "file is too big" in err_text:
-            await status_msg.edit_text(
-                "⚠️ <b>Plik przekracza limit pobierania Telegram API (20 MB)!</b>\n\n"
-                "Skorzystaj z lokalnego serwera Telegram Bot API, aby przetwarzać większe pliki."
-            )
-        else:
-            await status_msg.edit_text(f"❌ <b>Błąd Telegram API:</b> <code>{str(e)[:150]}</code>")
+        logger.error(f"TelegramBadRequest in video uniquify: {e}")
+        await status_msg.edit_text(f"❌ <b>Błąd Telegram API:</b> <code>{str(e)[:150]}</code>")
     except Exception as e:
         logger.error(f"Error during video uniquify callback: {e}", exc_info=True)
         await status_msg.edit_text(
-            f"❌ <b>Wystąpił błąd podczas unikalizacji:</b>\n<code>{type(e).__name__}: {str(e)[:150]}</code>"
+            f"❌ <b>Wystąpił błąd podczas unikalizacji wideo:</b>\n<code>{type(e).__name__}: {str(e)[:150]}</code>"
         )
+    finally:
+        if task_dir.exists():
+            shutil.rmtree(task_dir, ignore_errors=True)
+
+
+@router.callback_query(F.data == "unq_photo")
+async def handle_uniquify_photo_callback(query: CallbackQuery, bot: Bot, settings: Settings):
+    """Obsługuje kliknięcie przycisku unikalizacji zdjęcia (rozbijanie SynthID / Anti-AI)."""
+    msg = query.message
+    if not msg:
+        await query.answer("Wiadomość wygasła.", show_alert=True)
+        return
+
+    file_id, filename, file_size = extract_media_from_message(msg)
+    if not file_id:
+        await query.answer("Nie znaleziono zdjęcia do unikalizacji.", show_alert=True)
+        return
+
+    await query.answer("Rozpoczynam unikalizację zdjęcia...")
+    status_msg = await msg.reply("⏳ <i>Unikalizuję zdjęcie i rozbijam ślady SynthID (FFmpeg + ExifTool)...</i>")
+    await bot.send_chat_action(chat_id=msg.chat.id, action="upload_document")
+
+    task_dir = settings.temp_dir / f"unq_photo_{uuid.uuid4().hex}"
+    task_dir.mkdir(parents=True, exist_ok=True)
+    input_path = task_dir / filename
+
+    stem = Path(filename).stem
+    suffix = Path(filename).suffix or ".jpg"
+    out_filename = f"unique_{stem}{suffix}" if not stem.startswith("unique_") else f"unique_{uuid.uuid4().hex[:4]}_{stem}{suffix}"
+    output_path = task_dir / out_filename
+
+    try:
+        file_obj = await bot.get_file(file_id)
+        if not file_obj.file_path:
+            raise RuntimeError("Nie udało się pobrać pliku ze serwera Telegram.")
+
+        await bot.download_file(file_obj.file_path, destination=input_path)
+
+        success, params = await uniquify_photo(input_path, output_path)
+        if not success or not output_path.exists() or not params:
+            await status_msg.edit_text("❌ <b>Błąd podczas unikalizacji zdjęcia.</b>")
+            return
+
+        caption = params.format_telegram_caption()
+        out_file = FSInputFile(path=output_path, filename=out_filename)
+
+        await msg.reply_document(
+            document=out_file,
+            caption=caption,
+            reply_markup=get_photo_keyboard(is_retry=True),
+            disable_content_type_detection=True
+        )
+
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.error(f"Error during photo uniquify callback: {e}", exc_info=True)
+        await status_msg.edit_text(f"❌ <b>Wystąpił błąd:</b> <code>{type(e).__name__}: {str(e)[:150]}</code>")
+    finally:
+        if task_dir.exists():
+            shutil.rmtree(task_dir, ignore_errors=True)
+
+
+@router.callback_query(F.data == "zip")
+async def handle_zip_callback(query: CallbackQuery, bot: Bot, settings: Settings):
+    """Pakuje plik z wiadomości do archiwum .zip i odsyła go użytkownikowi."""
+    msg = query.message
+    if not msg:
+        await query.answer("Wiadomość wygasła.", show_alert=True)
+        return
+
+    file_id, filename, file_size = extract_media_from_message(msg)
+    if not file_id:
+        await query.answer("Nie znaleziono pliku do spakowania.", show_alert=True)
+        return
+
+    await query.answer("Tworzę paczkę ZIP...")
+    status_msg = await msg.reply("📦 <i>Pakuję plik do sterylnego archiwum ZIP...</i>")
+    await bot.send_chat_action(chat_id=msg.chat.id, action="upload_document")
+
+    task_dir = settings.temp_dir / f"zip_{uuid.uuid4().hex}"
+    task_dir.mkdir(parents=True, exist_ok=True)
+    local_path = task_dir / filename
+
+    zip_filename = f"{Path(filename).stem}.zip"
+    zip_path = task_dir / zip_filename
+
+    try:
+        file_obj = await bot.get_file(file_id)
+        if not file_obj.file_path:
+            raise RuntimeError("Nie udało się pobrać pliku.")
+
+        await bot.download_file(file_obj.file_path, destination=local_path)
+
+        success = create_zip_archive(local_path, zip_path)
+        if not success or not zip_path.exists():
+            await status_msg.edit_text("❌ <b>Nie udało się utworzyć archiwum ZIP.</b>")
+            return
+
+        zip_input_file = FSInputFile(path=zip_path, filename=zip_filename)
+        zip_caption = (
+            "📦 <b>Plik pomyślnie spakowany do archiwum ZIP!</b>\n\n"
+            "💡 <b>Instrukcja dla użytkowników iPhone:</b>\n"
+            "1. Kliknij na plik ZIP i wybierz <b>Zapisz w Plikach</b> (np. 'Na moim iPhonie').\n"
+            "2. W aplikacji 'Pliki' kliknij archiwum raz, aby je rozpakować.\n"
+            "🛡️ <i>W ten sposób plik ma 100% sterylną izolację i nie otrzymuje żadnego systemowego znacznika Telegrama.</i>"
+        )
+
+        await msg.reply_document(
+            document=zip_input_file,
+            caption=zip_caption,
+            disable_content_type_detection=True
+        )
+
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.error(f"Error during zip creation: {e}", exc_info=True)
+        await status_msg.edit_text(f"❌ <b>Błąd podczas tworzenia ZIP:</b> <code>{str(e)[:150]}</code>")
     finally:
         if task_dir.exists():
             shutil.rmtree(task_dir, ignore_errors=True)

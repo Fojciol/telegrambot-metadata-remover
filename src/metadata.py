@@ -41,18 +41,19 @@ class MetadataReport:
     date: Optional[str] = None
     software: Optional[str] = None
     author: Optional[str] = None
+    ai_trace: Optional[str] = None
     total_tags_found: int = 0
     other_tags: List[str] = field(default_factory=list)
 
     @property
     def has_sensitive_data(self) -> bool:
-        return bool(self.gps or self.device or self.date or self.software or self.author or self.total_tags_found > 0)
+        return bool(self.gps or self.device or self.date or self.software or self.author or self.ai_trace or self.total_tags_found > 0)
 
     def format_telegram_message(self) -> str:
         if not self.has_sensitive_data:
             return (
                 "🧹 <b>Plik przetworzony pomyślnie!</b>\n\n"
-                "ℹ️ <i>W pliku nie wykryto żadnych ukrytych metadanych (GPS, model aparatu, dane twórcy). "
+                "ℹ️ <i>W pliku nie wykryto żadnych ukrytych metadanych (GPS, model aparatu, dane twórcy, manifesty AI). "
                 "Plik został dodatkowo sprawdzony i zabezpieczony.</i>"
             )
 
@@ -61,6 +62,8 @@ class MetadataReport:
             "📋 <b>Wykryte i usunięte informacje:</b>"
         ]
 
+        if self.ai_trace:
+            lines.append(f"• 🤖 <b>Ślady generatora AI:</b> <code>{self.ai_trace}</code>")
         if self.gps:
             lines.append(f"• 📍 <b>Lokalizacja GPS:</b> <code>{self.gps}</code>")
         if self.device:
@@ -73,7 +76,7 @@ class MetadataReport:
             lines.append(f"• 👤 <b>Autor / Właściciel:</b> <code>{self.author}</code>")
 
         lines.append(f"\n🔢 <b>Łącznie usuniętych tagów metadanych:</b> {self.total_tags_found}")
-        lines.append("\n🛡️ <i>Wszystkie wrażliwe znaczniki zostały bezpowrotnie usunięte bez zmiany jakości pliku.</i>")
+        lines.append("\n🛡️ <i>Wszystkie wrażliwe znaczniki i manifesty zostały bezpowrotnie usunięte.</i>")
 
         return "\n".join(lines)
 
@@ -131,6 +134,34 @@ async def inspect_metadata(file_path: Path) -> MetadataReport:
                 report.author = str(raw_meta[auth_key])
                 break
 
+        # Szukanie śladów AI (C2PA, JUMBF, prompty, generatory Kling, Nanabanapro itp.)
+        ai_indicators = []
+        ai_keywords = [
+            "c2pa", "jumbf", "kling", "nanabanapro", "midjourney", "dall-e", "dalle",
+            "openai", "sora", "runway", "pika", "luma", "firefly", "stablediffusion",
+            "comfyui", "novelai", "flux"
+        ]
+        for k, v in raw_meta.items():
+            k_lower = str(k).lower()
+            v_lower = str(v).lower() if isinstance(v, (str, int, float)) else ""
+
+            if any(c in k_lower for c in ("c2pa", "jumbf", "contentcredential", "claim")):
+                if "C2PA (Content Credentials)" not in ai_indicators:
+                    ai_indicators.append("C2PA (Content Credentials)")
+
+            if k_lower in ("prompt", "parameters", "workflow", "generation_data"):
+                if "Prompt / Workflow generatora" not in ai_indicators:
+                    ai_indicators.append("Prompt / Workflow generatora")
+
+            for kw in ai_keywords:
+                if (kw in k_lower or (k_lower in ("software", "make", "model", "comment", "description", "usercomment", "xpcomment") and kw in v_lower)) and kw not in ("c2pa", "jumbf"):
+                    readable_kw = kw.capitalize()
+                    if readable_kw not in ai_indicators:
+                        ai_indicators.append(readable_kw)
+
+        if ai_indicators:
+            report.ai_trace = ", ".join(ai_indicators[:3])
+
         # Licznik wszystkich nietechnicznych tagów
         custom_tags = [k for k in raw_meta.keys() if k not in IGNORE_TAGS]
         report.total_tags_found = len(custom_tags)
@@ -152,9 +183,10 @@ async def inspect_metadata(file_path: Path) -> MetadataReport:
 async def strip_metadata(file_path: Path) -> bool:
     """
     Usuwa wszystkie metadane z pliku in-place za pomocą ExifTool.
+    Zawiera celowe czyszczenie manifestów kryptograficznych C2PA / JUMBF.
     Zwraca True, jeśli operacja zakończyła się sukcesem.
     """
-    cmd = ["exiftool", "-all=", "-overwrite_original", str(file_path)]
+    cmd = ["exiftool", "-all=", "-JUMBF:all=", "-overwrite_original", str(file_path)]
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,

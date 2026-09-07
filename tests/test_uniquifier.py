@@ -9,7 +9,9 @@ from src.video_uniquifier import (
     generate_random_params,
     build_filter_chains,
     uniquify_video,
-    has_audio_stream
+    uniquify_photo,
+    has_audio_stream,
+    create_zip_archive
 )
 
 
@@ -53,6 +55,38 @@ class TestVideoUniquifier(unittest.TestCase):
         deep_params = generate_random_params(mode="deep")
         vf_deep, af_deep = build_filter_chains(deep_params)
         self.assertIn("hflip", vf_deep)
+
+    def test_create_zip_archive(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            sample_file = tmp_path / "test.txt"
+            sample_file.write_text("hello world")
+            zip_dest = tmp_path / "test.zip"
+
+            success = create_zip_archive(sample_file, zip_dest)
+            self.assertTrue(success)
+            self.assertTrue(zip_dest.exists())
+            self.assertGreater(zip_dest.stat().st_size, 0)
+
+    def test_uniquify_photo_end_to_end(self):
+        if not shutil.which("ffmpeg"):
+            self.skipTest("ffmpeg is not installed on the system")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            img_in = tmp_path / "photo.jpg"
+            img_out = tmp_path / "photo_unique.jpg"
+
+            # Generujemy obrazek testowy przez ffmpeg
+            gen_cmd = f"ffmpeg -y -f lavfi -i color=c=blue:s=160x120:d=1 -vframes 1 {img_in} >/dev/null 2>&1"
+            res = os.system(gen_cmd)
+            self.assertEqual(res, 0)
+
+            success, params = asyncio.run(uniquify_photo(img_in, img_out))
+            self.assertTrue(success)
+            self.assertIsNotNone(params)
+            self.assertTrue(img_out.exists())
+            self.assertGreater(img_out.stat().st_size, 0)
 
     def test_uniquify_ffmpeg_end_to_end(self):
         # Sprawdzamy czy ffmpeg jest dostępny w systemie

@@ -9,14 +9,20 @@ Przystosowany do prostego uruchomienia na VPS za pomocą panelu **Dokploy** (lub
 ## ✨ Cechy i możliwości
 
 - 🛡️ **Bezstratne czyszczenie (ExifTool):** Usuwa metadane in-place bez dekompresji i ponownej kompresji plików – jakość grafiki i wideo pozostaje w 100% nienaruszona.
-- ⚡ **Unikalizator wideo (Anti-Duplicate / Bypass Meta ThreatExchange & TikTok):**
-  - Oparty na badaniach algorytmów **PDQ, TMK+PDQF i vPDQ** rozwijanych przez Meta (Instagram/Facebook) i TikTok.
-  - Aplikuje losowe mikromodyfikacje (mikro-zoom 1-2%, mikro-prędkość, ziarno matrycy, korekta barw i audio), generując zupełnie nowy cyfrowy odcisk percepcyjny.
+- 🤖 **Usuwanie śladów generatorów AI (Kling AI, Nanabanapro, Midjourney, DALL-E, Sora, ComfyUI):**
+  - Trwale niszczy kryptograficzne manifesty **C2PA / JUMBF (Content Credentials)**, które social media wykorzystują do nakładania etykiet *"Created with AI"* i ucinania zasięgów.
+  - Wykrywa i czyści ukryte prompty, workflow, seedy i parametry generowania w plikach PNG, JPEG i MP4.
+- ⚡ **Unikalizator wideo i zdjęć (Bypass Meta ThreatExchange, TikTok & SynthID):**
+  - Rozbija niewidzialne cyfrowe znaki wodne **SynthID** (Kling AI / Google) i perceptual hashing (**PDQ, TMK+PDQF, vPDQ**).
+  - Aplikuje losowe mikromodyfikacje (mikro-zoom 1-2%, mikro-prędkość, ziarno matrycy, korekta barw Rec.709 i audio).
   - **Tryb Łagodny:** Bezpieczny dla filmów z napisami i twarzami (bez lustra).
   - **Tryb Głęboki:** Zawiera dodatkowo poziome odbicie lustrzane (`hflip`) dla maksymalnego rozbicia sygnatur przestrzennych.
-  - Możliwość generowania wielu unikalnych kopii z jednego filmu (dla różnych kont) jednym kliknięciem.
+  - Generowanie wielu unikalnych kopii z jednego filmu (dla różnych kont) jednym kliknięciem.
+- 📱 **100% Czyste pliki dla iPhone (brak odtwarzacza mediów i izolacja od Zdjęć):**
+  - Wszystkie pliki są wysyłane jako surowe dokumenty binarne (`disable_content_type_detection=True`).
+  - Opcja **📦 Pobierz jako ZIP** – spakowanie w locie do archiwum .zip. Po zapisaniu do aplikacji *Pliki* na iPhone materiał ma 100% sterylną izolację bez systemowych oznaczeń w galerii.
 - 📁 **Wielofunkcyjność:** Obsługuje zdjęcia (JPEG, PNG, HEIC, WEBP, TIFF), wideo (MP4, MOV itp.), dokumenty (PDF) i pliki audio.
-- 📊 **Szczegółowy raport:** Odsyła plik wraz ze zwięzłym podsumowaniem wykrytych i usuniętych wrażliwych informacji (GPS, model aparatu, czas wykonania, autor).
+- 📊 **Szczegółowy raport:** Odsyła plik z podsumowaniem wykrytych i usuniętych wrażliwych informacji (GPS, model aparatu, czas wykonania, autor, ślady AI).
 - 🔒 **Prywatność i bezpieczeństwo:**
   - Whitelist: Dostęp ograniczony tylko do wybranych Telegram ID użytkowników (ochrona Twojego serwera VPS).
   - Zerowa retencja: Pliki są przetwarzane w katalogu tymczasowym i **natychmiast trwale usuwane** po odesłaniu.

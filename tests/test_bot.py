@@ -35,6 +35,7 @@ class TestBotComponents(unittest.TestCase):
             date="2024:05:10 14:32:00",
             software="iOS 17.4",
             author="Jan Kowalski",
+            ai_trace="C2PA (Content Credentials), Kling AI",
             total_tags_found=24
         )
         self.assertTrue(report.has_sensitive_data)
@@ -44,6 +45,7 @@ class TestBotComponents(unittest.TestCase):
         self.assertIn("52.2297 N, 21.0122 E", formatted)
         self.assertIn("Apple iPhone 15 Pro", formatted)
         self.assertIn("Jan Kowalski", formatted)
+        self.assertIn("C2PA (Content Credentials), Kling AI", formatted)
         self.assertIn("24", formatted)
 
     def test_metadata_report_formatting_clean_file(self):
