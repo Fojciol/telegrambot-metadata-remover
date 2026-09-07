@@ -3,7 +3,7 @@ import os
 import shutil
 import uuid
 from pathlib import Path
-from typing import Callable, Dict, Any, Awaitable, Optional
+from typing import Callable, Dict, Any, Awaitable, Optional, Tuple
 
 from aiogram import Router, F, Bot
 from aiogram.filters import CommandStart, Command
